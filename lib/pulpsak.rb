@@ -72,5 +72,28 @@ module Pulpsak
     task = Pulpsak.task_inspect(href)
     return task
   end
-
+  def self.find_existing_publication(pub_opts)
+    pub_api = PulpRpmClient::PublicationsRpmApi.new
+    existing_publication = nil
+    if pub_opts.has_key?(:repository_version)
+      # if we have a specific version, we can look through all
+      # existing publications to avoid creating one, which can be
+      # expensive
+      pub_api.list.results.each do |pub|
+        pub_hash = pub.to_hash
+        match = true
+        [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck,:repository_version].each do |p|
+          if pub_opts[p] != pub_hash[p]
+            match = false
+            break
+          end
+        end
+        if match
+          existing_publication = pub
+          break
+        end
+      end
+    end
+    return existing_publication
+  end
 end
