@@ -38,7 +38,7 @@ class Remotes < Thor
     options[:url] = url
     pp remotes_api.create(options)
   end
-  desc "update [NAME]", "create remote"
+  desc "update [NAME]", "update remote"
   method_option :ca_cert, :type => :string, :default => nil, :desc => "A PEM encoded CA certificate used to validate the server certificate presented by the remote server."
   method_option :client_cert, :type => :string, :default => nil, :desc => "A PEM encoded client certificate used for authentication."
   method_option :client_key, :type => :string, :default => nil, :desc => "A PEM encoded private key used for authentication."
