@@ -114,7 +114,8 @@ class Repositories < Thor
     repo_api = PulpRpmClient::RepositoriesRpmApi.new
     repo_api.list.results.each do |dist|
       if dist.name == name
-        pp repo_api.sync(dist.pulp_href,{mirror: options[:mirror]})
+        print "syncing #{name} (you can ctrl-c out, it will continue in the background)"
+        pp Pulpsak.wait_on_task(repo_api.sync(dist.pulp_href,{mirror: options[:mirror]}).task)
         break
       end
     end
