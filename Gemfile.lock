@@ -1,0 +1,52 @@
+PATH
+  remote: .
+  specs:
+    pulpsak (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    diff-lcs (1.4.4)
+    faraday (1.1.0)
+      multipart-post (>= 1.2, < 3)
+      ruby2_keywords
+    json (2.3.1)
+    multipart-post (2.1.1)
+    pulp_rpm_client (3.8.0)
+      faraday (>= 0.14.0)
+      json (~> 2.1, >= 2.1.0)
+    pulpcore_client (3.8.1)
+      faraday (>= 0.14.0)
+      json (~> 2.1, >= 2.1.0)
+    rake (12.3.3)
+    rspec (3.10.0)
+      rspec-core (~> 3.10.0)
+      rspec-expectations (~> 3.10.0)
+      rspec-mocks (~> 3.10.0)
+    rspec-core (3.10.0)
+      rspec-support (~> 3.10.0)
+    rspec-expectations (3.10.0)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.10.0)
+    rspec-mocks (3.10.0)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.10.0)
+    rspec-support (3.10.0)
+    ruby2_keywords (0.0.2)
+    text-table (1.2.4)
+    thor (1.0.1)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  pulp_rpm_client
+  pulpcore_client
+  pulpsak!
+  rake (~> 12.0)
+  rspec (~> 3.0)
+  text-table
+  thor (~> 1.0)
+
+BUNDLED WITH
+   2.1.4
