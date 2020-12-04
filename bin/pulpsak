@@ -233,7 +233,6 @@ class Distributions < Thor
     else
       pub_opts[:repository] = repo.pulp_href
     end
-    pp pub_opts
     print "creating publication"
     begin
       task = Pulpsak.wait_on_task(pub_api.create(pub_opts).task)
