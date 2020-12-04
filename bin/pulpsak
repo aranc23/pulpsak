@@ -172,7 +172,12 @@ class Repositories < Thor
   end
   desc "delete [NAME]", "delete a repository"
   def delete(name)
-    pp PulpRpmClient::RepositoriesRpmApi.new.delete(Pulpsak.repository_inspect_by_name(name).pulp_href)
+    unless repo = Pulpsak.repository_inspect_by_name(name)
+      puts "unable to find specified repository #{name}"
+      exit 1
+    end
+    puts "delete repository #{name}"
+    Pulpsak.wait_on_task(PulpRpmClient::RepositoriesRpmApi.new.delete(repo.pulp_href).task)
   end
   desc "versions", "manage repository versions"
   subcommand "versions", RepositotyVersions
