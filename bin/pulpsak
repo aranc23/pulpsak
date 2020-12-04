@@ -311,11 +311,11 @@ class Distributions < Thor
       end
     end
     [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck].each do |p|
-      if options[p] and options[p] != nil
-        if p =~ /check$/
-          pub_opts[p] = options[p] ? 1 : 0
+      if options.has_key?(p.to_s) and options[p.to_s] != nil
+        if p.to_s =~ /check$/
+          pub_opts[p] = options[p.to_s] == true ? 1 : 0
         else
-          pub_opts[p] = options[p]
+          pub_opts[p] = options[p.to_s]
         end
       end
     end
