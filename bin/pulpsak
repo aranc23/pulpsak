@@ -282,9 +282,19 @@ class Publications < Thor
   end
   desc "cleanup", "delete all publications (will skip ones in use)"
   def cleanup()
-    api = PulpRpmClient::PublicationsRpmApi.new
-    api.list.results.each do |pub|
-      pp api.delete(pub.pulp_href)
+    dists = PulpRpmClient::DistributionsRpmApi.new
+    pubs = PulpRpmClient::PublicationsRpmApi.new
+
+    pub_hrefs = []
+    dists.list.results.each do |dist|
+      if dist.publication
+        pub_hrefs.push(dist.publication)
+      end
+    end
+    pubs.list.results.each do |pub|
+      unless pub_hrefs.include?(pub.pulp_href)
+        pubs.delete(pub.pulp_href)
+      end
     end
   end
 end
