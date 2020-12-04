@@ -64,7 +64,8 @@ class Remotes < Thor
     if not options[:url]
       options[:url] = remote.url
     end
-    pp remotes_api.update(remote.pulp_href,options)
+    puts "updating remote #{name}"
+    Pulpsak.wait_on_task(remotes_api.update(remote.pulp_href,options).task)
   end
   desc "delete [NAME]", "delete a remote"
   def delete(name)
