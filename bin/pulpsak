@@ -1,0 +1,223 @@
+require "thor"
+require "pulpsak"
+require "text-table"
+
+class Remotes < Thor
+  desc "list", "list all remotes"
+  def list()
+    remotes_api = PulpRpmClient::RemotesRpmApi.new
+    table = Text::Table.new
+    table.head = ["last update","name","url","download_concurrency","policy"]
+    table.rows = []
+    remotes_api.list.results.each do |remote|
+      table.rows << [
+        remote.pulp_last_updated.to_time,
+        remote.name,
+        remote.url,
+        remote.download_concurrency.to_s,
+        remote.policy,
+      ]
+    end
+    print table.to_s
+  end
+  desc "create [NAME] [URL]", "create remote"
+  method_option :ca_cert, :type => :string, :default => nil, :desc => "A PEM encoded CA certificate used to validate the server certificate presented by the remote server."
+  method_option :client_cert, :type => :string, :default => nil, :desc => "A PEM encoded client certificate used for authentication."
+  method_option :client_key, :type => :string, :default => nil, :desc => "A PEM encoded private key used for authentication."
+  method_option :tls_validation, :type => :boolean, :default => nil, :desc => "If True, TLS peer validation must be performed."
+  method_option :proxy_url, :type => :string, :default => nil, :desc => "The proxy URL. Format: scheme://user:password@host:port"
+  method_option :username, :type => :string, :default => nil, :desc => "The username to be used for authentication when syncing."
+  method_option :password, :type => :string, :default => nil, :desc => "The password to be used for authentication when syncing."
+  method_option :download_concurrency, :type => :numeric, :default => nil, :desc => "Total number of simultaneous connections."
+  method_option :policy, :type => :string, :default => nil, :desc => "The policy to use when downloading content. The possible values include: 'immediate', 'on_demand', and 'streamed'. 'immediate' is the default."
+  method_option :sles_auth_token, :type => :string, :default => nil, :desc => "Authentication token for SLES repositories."
+
+  def create(name,url)
+    remotes_api = PulpRpmClient::RemotesRpmApi.new
+    options[:name] = name
+    options[:url] = url
+    pp remotes_api.create(options)
+  end
+  desc "update [NAME]", "create remote"
+  method_option :ca_cert, :type => :string, :default => nil, :desc => "A PEM encoded CA certificate used to validate the server certificate presented by the remote server."
+  method_option :client_cert, :type => :string, :default => nil, :desc => "A PEM encoded client certificate used for authentication."
+  method_option :client_key, :type => :string, :default => nil, :desc => "A PEM encoded private key used for authentication."
+  method_option :tls_validation, :type => :boolean, :default => nil, :desc => "If True, TLS peer validation must be performed."
+  method_option :proxy_url, :type => :string, :default => nil, :desc => "The proxy URL. Format: scheme://user:password@host:port"
+  method_option :username, :type => :string, :default => nil, :desc => "The username to be used for authentication when syncing."
+  method_option :password, :type => :string, :default => nil, :desc => "The password to be used for authentication when syncing."
+  method_option :download_concurrency, :type => :numeric, :default => nil, :desc => "Total number of simultaneous connections."
+  method_option :policy, :type => :string, :default => nil, :desc => "The policy to use when downloading content. The possible values include: 'immediate', 'on_demand', and 'streamed'. 'immediate' is the default."
+  method_option :sles_auth_token, :type => :string, :default => nil, :desc => "Authentication token for SLES repositories."
+  method_option :url, :type => :string, :default => nil, :desc => "update the url"
+  method_option :rename, :type => :string, :default => nil, :desc => "rename the remote"
+
+  def update(name)
+    remotes_api = PulpRpmClient::RemotesRpmApi.new
+    remote = Pulpsak.remote_inspect_by_name(name)
+    if options[:rename]
+      options[:name] = options[:rename]
+      options.delete('rename')
+    else
+      options[:name] = remote.name
+    end
+    if not options[:url]
+      options[:url] = remote.url
+    end
+    pp remotes_api.update(remote.pulp_href,options)
+  end
+  desc "delete [NAME]", "delete a remote"
+  def delete(name)
+    pp PulpRpmClient::RemotesRpmApi.new.delete(Pulpsak.remote_inspect_by_name(name).pulp_href)
+  end
+end
+class RepositotyVersions < Thor
+  desc "list [NAME]", "list all repo versions"
+  def list(name)
+    repover_api = PulpRpmClient::RepositoriesRpmVersionsApi.new
+    if repo = Pulpsak.repository_inspect_by_name(name)
+      table = Text::Table.new
+      table.head = ["created","number","added","present","removed"]
+      table.rows = []
+      repover_api.list(repo.pulp_href).results.each do |rver|
+        table.rows << [
+          rver.pulp_created.to_time,
+          rver.number.to_s,
+          rver.content_summary.added.length,
+          rver.content_summary.present.length,
+          rver.content_summary.removed.length,
+        ]
+      end
+      print table.to_s
+    end
+  end
+end
+class Repositories < Thor
+  desc "list", "list all repos"
+  def list()
+    remotes_api = PulpRpmClient::RemotesRpmApi.new
+
+    table = Text::Table.new
+      table.head = ["created","name","keep","remote"]
+      table.rows = []
+      PulpRpmClient::RepositoriesRpmApi.new.list.results.each do |dist|
+        table.rows << [dist.pulp_created.to_time,dist.name,dist.retain_package_versions,(dist.remote ? remotes_api.read(dist.remote).url : '')]
+      end
+      print table.to_s
+  end
+
+  desc "sync [NAME]", "call sync on repo"
+  method_option :mirror, :type => :boolean, :default => false, :desc => "mirror true removes rpms, false is merely additive"
+  def sync(name)
+    repo_api = PulpRpmClient::RepositoriesRpmApi.new
+    repo_api.list.results.each do |dist|
+      if dist.name == name
+        pp repo_api.sync(dist.pulp_href,{mirror: options[:mirror]})
+        break
+      end
+    end
+  end
+  desc "create [NAME]", "create a new repository"
+  method_option :description, :type => :string, :default => nil, :desc => "repository description"
+  method_option :retain_package_versions, :type => :numeric, :default => 0, :desc => "number of package versions to keep, 0 keeps all"
+  method_option :remote, :type => :string, :default => nil, :desc => "name of existing remote"
+  method_option :metadata_signing_service, :type => :string, :default => nil, :desc => "url of metadata signing service"
+  def create(name)
+    options[:name] = name
+    if options[:remote]
+      if remote = Pulpsak.remote_inspect_by_name(options[:remote])
+        options[:remote] = remote.pulp_href
+      else
+        raise ArgumentError, "could not find remote #{options[:remote]}"
+      end
+    end
+    repo_api = PulpRpmClient::RepositoriesRpmApi.new
+    pp repo_api.create(options)
+  end
+  desc "update [NAME]", "create a new repository"
+  method_option :rename, :type => :string, :default => nil, :desc => "new name for repository"
+  method_option :description, :type => :string, :default => nil, :desc => "repository description"
+  method_option :retain_package_versions, :type => :numeric, :default => 0, :desc => "number of package versions to keep, 0 keeps all"
+  method_option :remote, :type => :string, :default => nil, :desc => "name of existing remote"
+  method_option :metadata_signing_service, :type => :string, :default => nil, :desc => "url of metadata signing service"
+  def update(name)
+    repo_api = PulpRpmClient::RepositoriesRpmApi.new
+    opts = {}
+
+    repo = Pulpsak.repository_inspect_by_name(name)
+    if options[:remote]
+      if remote = Pulpsak.remote_inspect_by_name(options[:remote])
+        opts[:remote] = remote.pulp_href
+      else
+        raise ArgumentError, "could not find remote #{options[:remote]}"
+      end
+    end
+    if options[:description]
+      opts[:description] = options[:description]
+    end
+    if options[:metadata_signing_service]
+      opts[:metadata_signing_service] = options[:metadata_signing_service]
+    end
+    if options[:retain_package_versions]
+      opts[:retain_package_versions] = options[:retain_package_versions].to_i
+    end
+    
+    if options[:rename]
+      opts[:name] = options[:rename]
+      pp repo_api.update(repo.pulp_href,opts)
+    else
+      pp repo_api.partial_update(repo.pulp_href,opts)
+    end
+  end
+  desc "delete [NAME]", "delete a repository"
+  def delete(name)
+    pp PulpRpmClient::RepositoriesRpmApi.new.delete(Pulpsak.repository_inspect_by_name(name).pulp_href)
+  end
+  desc "versions", "manage repository versions"
+  subcommand "versions", RepositotyVersions
+end
+class Distributions < Thor
+  desc "list", "list all distributions"
+  def list()
+    pubs = PulpRpmClient::PublicationsRpmApi.new
+
+    table = Text::Table.new
+      table.head = ["created","name","base","pub->repo"]
+      table.rows = []
+      PulpRpmClient::DistributionsRpmApi.new.list.results.each do |dist|
+        pub = pubs.read(dist.publication)
+        table.rows << [dist.pulp_created.to_time,dist.name,dist.base_path,Pulpsak.repository_inspect(pub.repository).name + ':' + Pulpsak.repository_version_inspect(pub.repository_version).number.to_s]
+      end
+      print table.to_s
+  end
+end
+class Publications < Thor
+  desc "list", "list all pubs"
+  def list()
+    table = Text::Table.new
+      table.head = ["created","repver","gpgcheck","repo_gpgcheck","metadata","package"]
+      table.rows = []
+      PulpRpmClient::PublicationsRpmApi.new.list.results.each do |pub|
+        table.rows << [pub.pulp_created,Pulpsak.repository_inspect(pub.repository).name + ':' + Pulpsak.repository_version_inspect(pub.repository_version).number.to_s,pub.gpgcheck,pub.repo_gpgcheck,pub.metadata_checksum_type,pub.package_checksum_type]
+      end
+      print table.to_s
+  end
+end
+
+class Rpm < Thor
+  desc "distributions", "manage distributions"
+  subcommand "distributions", Distributions
+  desc "publications", "manage publications"
+  subcommand "publications", Publications
+  desc "repositories", "manage repositories"
+  subcommand "repositories", Repositories
+  desc "remotes", "manage remotes"
+  subcommand "remotes", Remotes
+end
+
+class PulpsakCli < Thor
+  desc "rpm", "manage rpm plugins"
+  subcommand "rpm", Rpm
+end
+
+PulpsakCli.start(ARGV)
