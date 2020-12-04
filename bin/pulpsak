@@ -183,22 +183,25 @@ class Distributions < Thor
     pubs = PulpRpmClient::PublicationsRpmApi.new
 
     table = Text::Table.new
-      table.head = ["created","name","base","pub->repo"]
+      table.head = ["created","name","base","pub->repo","gpgcheck","repo_gpgcheck","metadata","package"]
       table.rows = []
       PulpRpmClient::DistributionsRpmApi.new.list.results.each do |dist|
-        pp dist
-        repo_info = 'ORPHAN'
+        repo_info = ['ORPHAN','ORPHAN','ORPHAN','ORPHAN','ORPHAN']
         if dist.publication and pub = pubs.read(dist.publication) and pub.repository
-          repo_info = Pulpsak.repository_inspect(pub.repository).name +
-                      ':' +
-                      Pulpsak.repository_version_inspect(pub.repository_version).number.to_s
+          repo_info = [Pulpsak.repository_inspect(pub.repository).name +
+                       ':' +
+                       Pulpsak.repository_version_inspect(pub.repository_version).number.to_s,
+                       pub.gpgcheck,
+                       pub.repo_gpgcheck,
+                       pub.metadata_checksum_type,
+                       pub.package_checksum_type, ]
         end
         table.rows << [dist.pulp_created.to_time,dist.name,dist.base_path,repo_info]
       end
       print table.to_s
   end
-  desc "create [NAME] [BASE_PATH] [REPO]", "create a repository using a unique name, base path, and repository specification"
-  method_option :version, :type => :numeric, :default => 0, :desc => "Integer version number of repository to reference, default is to use the latest"
+  desc "create [NAME] [BASE_PATH] [REPO]", "create a distribution using a unique name, base path, and repository specification"
+  method_option :version, :type => :numeric, :default => nil, :desc => "Integer version number of repository to reference, default is to use the latest"
   method_option :metadata_checksum_type, :type => :string, :default => 'sha256', :desc => 'The checksum type for metadata, "unknown" "md5" "sha1" "sha224" "sha256" "sha384" "sha512"'
   method_option :package_checksum_type, :type => :string, :default => 'sha256', :desc => 'The checksum type for packages, "unknown" "md5" "sha1" "sha224" "sha256" "sha384" "sha512"'
   method_option :gpgcheck, :type => :boolean, :default => false, :desc => "An option specifying whether a client should perform a GPG signature check on packages."
@@ -231,44 +234,166 @@ class Distributions < Thor
       pub_opts[:repository] = repo.pulp_href
     end
     pp pub_opts
-    task_href = pub_api.create(pub_opts).task
     print "creating publication"
-    while Pulpsak.task_inspect(task_href).state == 'running'
-      print "."
-      sleep 3
+    begin
+      task = Pulpsak.wait_on_task(pub_api.create(pub_opts).task)
+    rescue PulpRpmClient::ApiError => e
+      puts "Exception when creating publication: #{e}"
+      exit 1
     end
-    print "\n"
-    task = Pulpsak.task_inspect(task_href)
-    pp task
     if task.state != 'completed'
       print "unable to create publication, unable to continue\n"
       exit 1
     end
     pub_href = task.created_resources[0]
-    task_href = dist_api.create(
-      {
-        :name => name,
-        :base_path => base_path,
-        :content_guard => options[:content_guard],
-        :publication => pub_href,
-      }
-    ).task
     print "creating distribution"
-    while Pulpsak.task_inspect(task_href).state == 'running'
-      print "."
-      sleep 3
+    begin
+      task = Pulpsak.wait_on_task(
+        dist_api.create(
+          {
+            :name => name,
+            :base_path => base_path,
+            :content_guard => options[:content_guard],
+            :publication => pub_href,
+          }
+        ).task)
+    rescue PulpRpmClient::ApiError => e
+      puts "\nException when creating distibution, deleting associated publication: #{e}"
+      pub_api.delete(pub_href)
+      exit 1
     end
-    print "\n"
-    task = Pulpsak.task_inspect(task_href)
-    pp task
     if task.state != "completed"
       print "unable to create distibution, deleting publication"
       pub_api.delete(pub_href)
       exit 1
     end
   end
-  
+  desc "update [NAME]", "update a distribution"
+  method_option :version, :type => :numeric, :default => nil, :desc => "Integer version number of repository to reference, default is to use the latest"
+  method_option :metadata_checksum_type, :type => :string, :default => nil, :desc => 'The checksum type for metadata, "unknown" "md5" "sha1" "sha224" "sha256" "sha384" "sha512"'
+  method_option :package_checksum_type, :type => :string, :default => nil, :desc => 'The checksum type for packages, "unknown" "md5" "sha1" "sha224" "sha256" "sha384" "sha512"'
+  method_option :gpgcheck, :type => :boolean, :default => false, :desc => "An option specifying whether a client should perform a GPG signature check on packages."
+  method_option :repo_gpgcheck, :type => :boolean, :default => false, :desc => "An option specifying whether a client should perform a GPG signature check on the repodata."
+  method_option :content_guard, :type => :string, :default => nil, :desc => 'An optional content-guard.'
+  method_option :newname, :type => :string, :default => nil, :desc => 'A unique name. Ex, rawhide and stable.'
+  method_option :base_path, :type => :string, :default => nil, :desc => 'The base (relative) path component of the published url. Avoid paths that overlap with other distribution base paths (e.g. "foo" and "foo/bar")'
+  method_option :repo, :type => :string, :default => nil, :desc => 'set the repository this distribution\'s publication references'
+  def update(name)
+    
+    pub_api = PulpRpmClient::PublicationsRpmApi.new
+    repo_api = PulpRpmClient::RepositoriesRpmApi.new
+    dist_api = PulpRpmClient::DistributionsRpmApi.new
+
+    unless dist = Pulpsak.distribution_inspect_by_name(name)
+      puts("distribution doesn't exist: #{name}\n")
+      exit 1
+    end
+    pp dist
+    unless dist.publication or options[:repo]
+      puts "this distribution has no publication defined, therefore you must specify a repo using --repo and optionally --version"
+      exit 1
+    end
+    pub_opts = {}
+    if dist.publication and old_pub = pub_api.read(dist.publication)
+      pp old_pub
+      # [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck,:repository_version].each do |p|
+      #   if options.has_key?(p)
+      #     pub_opts[p] = old_pub[p]
+      #   end
+      # end
+      pub_opts = {
+        :metadata_checksum_type => old_pub.metadata_checksum_type,
+        :package_checksum_type => old_pub.package_checksum_type,
+        :gpgcheck => old_pub.gpgcheck,
+        :repo_gpgcheck => old_pub.repo_gpgcheck,
+        :repository_version => old_pub.repository_version,
+      }
+    end
+    pp pub_opts
+    # override with cli options, surely I can do better than this
+    [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck].each do |p|
+      if options.has_key?(p) and options[p] != nil
+        if p =~ /check$/
+          pub_opts[p] = options[p] ? 1 : 0
+        else
+          pub_opts[p] = options[p]
+        end
+      end
+    end
+    pp pub_opts
+    if options[:repo]
+      repo = Pulpsak.repository_inspect_by_name(options[:repo])
+      unless repo
+        puts("unable to find repository #{options[:repo]}\n")
+        exit 1
+      end
+      if options[:version]
+        pub_opts[:repository_version] = repo.pulp_href + 'versions/' + options[:version].to_s + '/'
+      else
+        pub_opts[:repository] = repo.pulp_href
+        pub_opts.delete(:repository_version)
+      end
+    elsif options[:version]
+      # we want to change the version but not the repo!, and we have
+      # an old publiction or a prior check would have failed
+      repo = repo_api.read(old_pub.repository)
+      pub_opts[:repository_version] = repo.pulp_href + 'versions/' + options[:version].to_s + '/'
+    end
+    pp pub_opts
+    print "creating new publication"
+    begin
+      task = Pulpsak.wait_on_task(pub_api.create(pub_opts).task)
+    rescue PulpRpmClient::ApiError => e
+      puts "Exception when creating publication: #{e}"
+      exit 1
+    end
+    if task.state != 'completed'
+      pp task
+      print "unable to create publication, unable to continue\n"
+      exit 1
+    end
+    pub_href = task.created_resources[0]
+    dist_opts = {
+      :name => options[:newname] ? options[:newname] : dist.name,
+      :base_path => options[:base_path] ? options[:base_path] : dist.base_path,
+      :content_guard => options[:content_guard] ? options[:content_guard] : ( dist.content_guard ? dist.content_guard : nil),
+      :publication => pub_href,
+    }
+    pp dist_opts
+    print "updating distribution"
+    begin
+      #task = Pulpsak.wait_on_task(dist_api.update(dist.pulp_href,dist_opts).task)
+      pp dist_api.update(dist.pulp_href,dist_opts)
+    rescue PulpRpmClient::ApiError => e
+      puts "Exception when calling creating distibution, deleting associated publication: #{e}"
+      pub_api.delete(pub_href)
+      exit 1
+    end
+    if task.state != "completed"
+      print "unable to create distibution, deleting publication"
+      pub_api.delete(pub_href)
+      exit 1
+    end
+    if old_pub and old_pub.pulp_href
+      pub_api.delete(old_pub.pulp_href)
+    end
+  end
+  desc "delete [NAME]", "delete a repository and associated publication"
+  def delete(name)
+    
+    pub_api = PulpRpmClient::PublicationsRpmApi.new
+    dist_api = PulpRpmClient::DistributionsRpmApi.new
+    unless dist = Pulpsak.distribution_inspect_by_name(name)
+      puts("distribution does not exist: #{name}\n")
+      exit 1
+    end
+    if dist.publication
+      pp pub_api.delete(dist.publication)
+    end
+    pp dist_api.delete(dist.pulp_href)
+  end
 end
+
 class Publications < Thor
   desc "list", "list all publications"
   def list()
@@ -293,7 +418,8 @@ class Publications < Thor
     end
     pubs.list.results.each do |pub|
       unless pub_hrefs.include?(pub.pulp_href)
-        pubs.delete(pub.pulp_href)
+        puts "deleting publication #{pub.pulp_href}"
+        pp pubs.delete(pub.pulp_href)
       end
     end
   end

@@ -62,4 +62,15 @@ module Pulpsak
     api_instance = PulpcoreClient::TasksApi.new
     return api_instance.read(href)
   end
+  def self.wait_on_task(href,sleep_time: 3, spacer: '.', final: "\n")
+    api = PulpcoreClient::TasksApi.new
+    while Pulpsak.task_inspect(href).state == 'running' or Pulpsak.task_inspect(href).state == 'waiting'
+      print spacer
+      sleep sleep_time
+    end
+    print final
+    task = Pulpsak.task_inspect(href)
+    return task
+  end
+
 end
