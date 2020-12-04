@@ -288,31 +288,19 @@ class Distributions < Thor
       puts("distribution doesn't exist: #{name}\n")
       exit 1
     end
-    pp dist
     unless dist.publication or options[:repo]
       puts "this distribution has no publication defined, therefore you must specify a repo using --repo and optionally --version"
       exit 1
     end
     pub_opts = {}
     if dist.publication and old_pub = pub_api.read(dist.publication)
-      pp old_pub
-      # [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck,:repository_version].each do |p|
-      #   if options.has_key?(p)
-      #     pub_opts[p] = old_pub[p]
-      #   end
-      # end
-      pub_opts = {
-        :metadata_checksum_type => old_pub.metadata_checksum_type,
-        :package_checksum_type => old_pub.package_checksum_type,
-        :gpgcheck => old_pub.gpgcheck,
-        :repo_gpgcheck => old_pub.repo_gpgcheck,
-        :repository_version => old_pub.repository_version,
-      }
+      old_pub_hash = old_pub.to_hash
+      [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck,:repository_version].each do |p|
+        pub_opts[p] = old_pub_hash[p]
+      end
     end
-    pp pub_opts
-    # override with cli options, surely I can do better than this
     [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck].each do |p|
-      if options.has_key?(p) and options[p] != nil
+      if options[p] and options[p] != nil
         if p =~ /check$/
           pub_opts[p] = options[p] ? 1 : 0
         else
@@ -320,7 +308,6 @@ class Distributions < Thor
         end
       end
     end
-    pp pub_opts
     if options[:repo]
       repo = Pulpsak.repository_inspect_by_name(options[:repo])
       unless repo
@@ -339,43 +326,61 @@ class Distributions < Thor
       repo = repo_api.read(old_pub.repository)
       pub_opts[:repository_version] = repo.pulp_href + 'versions/' + options[:version].to_s + '/'
     end
-    pp pub_opts
-    print "creating new publication"
-    begin
-      task = Pulpsak.wait_on_task(pub_api.create(pub_opts).task)
-    rescue PulpRpmClient::ApiError => e
-      puts "Exception when creating publication: #{e}"
-      exit 1
+    existing_publication = nil
+    if pub_opts.has_key?(:repository_version)
+      # if we have a specific version, we can look through all
+      # existing publications to avoid creating one, which can be
+      # expensive
+      pub_api.list.results.each do |pub|
+        pub_hash = pub.to_hash
+        match = true
+        [:metadata_checksum_type,:package_checksum_type,:gpgcheck,:repo_gpgcheck,:repository_version].each do |p|
+          if pub_opts[p] != pub_hash[p]
+            match = false
+            break
+          end
+        end
+        if match
+          existing_publication = pub
+          break
+        end
+      end
     end
-    if task.state != 'completed'
-      pp task
-      print "unable to create publication, unable to continue\n"
-      exit 1
+    pub_href = ''
+    if existing_publication
+      pub_href = existing_publication.pulp_href
+    else
+      print "creating new publication"
+      begin
+        task = Pulpsak.wait_on_task(pub_api.create(pub_opts).task)
+      rescue PulpRpmClient::ApiError => e
+        puts "Exception when creating publication: #{e}"
+        exit 1
+      end
+      if task.state != 'completed'
+        print "unable to create publication, unable to continue\n"
+        exit 1
+      end
+      pub_href = task.created_resources[0]
     end
-    pub_href = task.created_resources[0]
     dist_opts = {
       :name => options[:newname] ? options[:newname] : dist.name,
       :base_path => options[:base_path] ? options[:base_path] : dist.base_path,
       :content_guard => options[:content_guard] ? options[:content_guard] : ( dist.content_guard ? dist.content_guard : nil),
       :publication => pub_href,
     }
-    pp dist_opts
     print "updating distribution"
     begin
-      #task = Pulpsak.wait_on_task(dist_api.update(dist.pulp_href,dist_opts).task)
-      pp dist_api.update(dist.pulp_href,dist_opts)
+      task = Pulpsak.wait_on_task(dist_api.update(dist.pulp_href,dist_opts).task,final: " complete\n")
+      #pp task
+      #pp dist_api.update(dist.pulp_href,dist_opts)
     rescue PulpRpmClient::ApiError => e
-      puts "Exception when calling creating distibution, deleting associated publication: #{e}"
-      pub_api.delete(pub_href)
+      puts "Exception when updating distibution: #{e}"
       exit 1
     end
     if task.state != "completed"
-      print "unable to create distibution, deleting publication"
-      pub_api.delete(pub_href)
+      print "unable to create distibution"
       exit 1
-    end
-    if old_pub and old_pub.pulp_href
-      pub_api.delete(old_pub.pulp_href)
     end
   end
   desc "delete [NAME]", "delete a repository and associated publication"
@@ -405,7 +410,7 @@ class Publications < Thor
       end
       print table.to_s
   end
-  desc "cleanup", "delete all publications (will skip ones in use)"
+  desc "cleanup", "delete all unreferenced publications"
   def cleanup()
     dists = PulpRpmClient::DistributionsRpmApi.new
     pubs = PulpRpmClient::PublicationsRpmApi.new
@@ -419,7 +424,7 @@ class Publications < Thor
     pubs.list.results.each do |pub|
       unless pub_hrefs.include?(pub.pulp_href)
         puts "deleting publication #{pub.pulp_href}"
-        pp pubs.delete(pub.pulp_href)
+        pubs.delete(pub.pulp_href)
       end
     end
   end
