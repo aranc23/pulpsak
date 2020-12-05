@@ -1,3 +1,5 @@
+#! /bin/env -S ruby -I ./lib
+
 require "thor"
 require "pulpsak"
 require "text-table"
