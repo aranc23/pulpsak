@@ -1,22 +1,45 @@
 require "pulpsak/version"
 require 'pulp_rpm_client'
 require 'pulpcore_client'
+require 'yaml'
 
 module Pulpsak
   class Error < StandardError; end
+  @@config = {
+  }
+  config_yaml = ''
+  if ENV.has_key?('XDG_CONFIG_HOME')
+    config_yaml = File.join(ENV['XDG_CONFIG_HOME'],'pulpsak','config.yaml')
+  elsif ENV.has_key?('HOME')
+    config_yaml = File.join(ENV['HOME'],'.config','pulpsak','config.yaml')
+  end
+  if File.exists?(config_yaml)
+    @@config = YAML.load_file(config_yaml)
+  else
+    puts "#{config_yaml} does not exist, using defaults"
+  end
+ 
   PulpcoreClient.configure do |config|
-    # Configure HTTP basic authorization: basicAuth
-    config.username = 'admin'
-    config.password = 'testing'
-    config.ssl_verify = false
-    config.host = 'localhost:8080'
+    config_data = {}
+    if @@config.has_key?('pulpcore')
+      config_data = @@config['pulpcore']
+    elsif @@config.has_key?('default')
+      config_data = @@config['default']
+    end
+    config_data.each do |key, value|
+      config.instance_variable_set("@#{key}".to_sym, value)
+    end
   end
   PulpRpmClient.configure do |config|
-    # Configure HTTP basic authorization: basicAuth
-    config.username = 'admin'
-    config.password = 'testing'
-    config.ssl_verify = false
-    config.host = 'localhost:8080'
+    config_data = {}
+    if @@config.has_key?('pulp_rpm')
+      config_data = @@config['pulp_rpm']
+    elsif @@config.has_key?('default')
+      config_data = @@config['default']
+    end
+    config_data.each do |key, value|
+      config.instance_variable_set("@#{key}".to_sym, value)
+    end
   end
 
   def self.repository_inspect(href)
