@@ -4,6 +4,19 @@ require "thor"
 require "pulpsak"
 require "text-table"
 
+class Tasks < Thor
+  desc "list", "list all tasks"
+  def list()
+    api_instance = PulpcoreClient::TasksApi.new
+    table = Text::Table.new
+    table.head = ["name","state","started","finished"]
+    table.rows = []
+    api_instance.list.results.each do |task|
+      table.rows << [ task.name, task.state, task.started_at, task.finished_at ]
+    end
+    print table.to_s
+  end
+end
 class Remotes < Thor
   desc "list", "list all remotes"
   def list()
@@ -83,7 +96,6 @@ class RepositotyVersions < Thor
       table.head = ["created","number","added","present","removed"]
       table.rows = []
       repover_api.list(repo.pulp_href).results.each do |rver|
-        #pp rver
         table.rows << [
           rver.pulp_created.to_time,
           rver.number.to_s,
@@ -435,6 +447,8 @@ end
 class PulpsakCli < Thor
   desc "rpm", "manage rpm plugins"
   subcommand "rpm", Rpm
+  desc "tasks", "list/manage tasks"
+  subcommand "tasks", Tasks
 end
 
 PulpsakCli.start(ARGV)
