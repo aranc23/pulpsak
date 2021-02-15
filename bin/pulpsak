@@ -400,6 +400,33 @@ class Distributions < Thor
     end
     pp Pulpsak.wait_on_task(dist_api.delete(dist.pulp_href).task)
   end
+  desc "sync [NAME]", "sync the underlying repository, create a new publicion, and update the distribution to reference it"
+  def sync(name)
+    pub_api = PulpRpmClient::PublicationsRpmApi.new
+    repo_api = PulpRpmClient::RepositoriesRpmApi.new
+    dist_api = PulpRpmClient::DistributionsRpmApi.new
+    repover_api = PulpRpmClient::RepositoriesRpmVersionsApi.new
+
+    unless dist = Pulpsak.distribution_inspect_by_name(name)
+      puts("distribution doesn't exist: #{name}\n")
+      exit 1
+    end
+    unless dist.publication or options[:repo]
+      puts "this distribution has no publication defined, therefore sync is not possible"
+      exit 1
+    end
+    repo = repo_api.read(pub_api.read(dist.publication).repository)
+    invoke "repositories:sync", [repo.name]
+    #task = repo_api.sync(repo.pulp_href,{}).task
+    #pp Pulpsak.wait_on_task(task)
+    version = 0
+    repover_api.list(repo.pulp_href).results.each do |rver|
+      if rver.number > version
+        version = rver.number
+      end
+    end
+    invoke "distributions:update", [name], :version => version
+  end
 end
 
 class Publications < Thor
