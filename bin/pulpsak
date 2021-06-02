@@ -309,6 +309,7 @@ class Distributions < Thor
     pub_api = PulpRpmClient::PublicationsRpmApi.new
     repo_api = PulpRpmClient::RepositoriesRpmApi.new
     dist_api = PulpRpmClient::DistributionsRpmApi.new
+    repover_api = PulpRpmClient::RepositoriesRpmVersionsApi.new
 
     unless dist = Pulpsak.distribution_inspect_by_name(name)
       puts("distribution doesn't exist: #{name}\n")
@@ -350,7 +351,21 @@ class Distributions < Thor
       # we want to change the version but not the repo!, and we have
       # an old publiction or a prior check would have failed
       repo = repo_api.read(old_pub.repository)
-      pub_opts[:repository_version] = repo.pulp_href + 'versions/' + options[:version].to_s + '/'
+
+      # check the valid versions of the repo
+      version_list = []
+      repover_api.list(repo.pulp_href).results.each do |rver|
+        version_list.push( rver.number )
+      end
+      version_list.sort!
+      if options[:version] < 0
+        pub_opts[:repository_version] = repo.pulp_href + 'versions/' + version_list[options[:version]].to_s + '/'
+      elsif version_list.include?(options[:version])
+        pub_opts[:repository_version] = repo.pulp_href + 'versions/' + options[:version].to_s + '/'
+      else
+        puts "specified version (#{options[:version]}) does not exist for the repository in question"
+        exit 1
+      end
     end
     existing_publication = Pulpsak.find_existing_publication(pub_opts)
     pub_href = ''
