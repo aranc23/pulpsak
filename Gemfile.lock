@@ -40,8 +40,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  pulp_rpm_client
-  pulpcore_client
+  pulp_rpm_client (~> 3.8.0)
+  pulpcore_client (~> 3.8.1)
   pulpsak!
   rake (~> 12.0)
   rspec (~> 3.0)
