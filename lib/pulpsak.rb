@@ -85,6 +85,10 @@ module Pulpsak
     api_instance = PulpcoreClient::TasksApi.new
     return api_instance.read(href)
   end
+  def self.task_cancel(href)
+    api_instance = PulpcoreClient::TasksApi.new
+    return api_instance.tasks_cancel(href)
+  end
   def self.wait_on_task(href,sleep_time: 3, spacer: '.', final: "\n")
     api = PulpcoreClient::TasksApi.new
     last_message = ''

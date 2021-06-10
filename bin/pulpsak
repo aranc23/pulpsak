@@ -16,14 +16,17 @@ class Tasks < Thor
     end
     print table.to_s
   end
-  desc "inspect [PULP_HREF]", " inspect task by uuid"
+  desc "inspect [PULP_HREF]", "inspect task by uuid"
   def inspect(pulp_href)
-    api_instance = PulpcoreClient::TasksApi.new
     pp Pulpsak.task_inspect(pulp_href)
   end
-  desc "wait [PULP_HREF]", " inspect task by uuid"
+  desc "wait [PULP_HREF]", "monitor task progress by uuid"
   def wait(pulp_href)
     pp Pulpsak.wait_on_task(pulp_href)
+  end
+  desc "cancel [PULP_HREF]", "cancel task by uuid"
+  def cancel(pulp_href)
+    pp Pulpsak.task_cancel(pulp_href)
   end
 end
 class Remotes < Thor
