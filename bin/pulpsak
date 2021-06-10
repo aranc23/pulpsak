@@ -124,12 +124,21 @@ class Repositories < Thor
 
   desc "sync [NAME]", "call sync on repo"
   method_option :mirror, :type => :boolean, :default => false, :desc => "mirror true removes rpms, false is merely additive"
+  method_option :remote, :type => :string, :desc => "mirror from alternate remote"
   def sync(name)
     repo_api = PulpRpmClient::RepositoriesRpmApi.new
     repo_api.list.results.each do |dist|
       if dist.name == name
+        opts = {mirror: options[:mirror]}
+        if options[:remote]
+          if remote = Pulpsak.remote_inspect_by_name(options[:remote])
+            opts['remote'] = remote.pulp_href
+          else
+            raise ArgumentError, "could not find remote #{options[:remote]}"
+          end
+        end
         print "syncing #{name} (you can ctrl-c out, it will continue in the background)"
-        pp Pulpsak.wait_on_task(repo_api.sync(dist.pulp_href,{mirror: options[:mirror]}).task)
+        pp Pulpsak.wait_on_task(repo_api.sync(dist.pulp_href,opts).task)
         break
       end
     end
