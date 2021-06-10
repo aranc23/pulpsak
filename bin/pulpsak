@@ -9,12 +9,21 @@ class Tasks < Thor
   def list()
     api_instance = PulpcoreClient::TasksApi.new
     table = Text::Table.new
-    table.head = ["name","state","started","finished"]
+    table.head = ["name","state","started","finished","pulp_href"]
     table.rows = []
     api_instance.list.results.each do |task|
-      table.rows << [ task.name, task.state, task.started_at, task.finished_at ]
+      table.rows << [ task.name, task.state, task.started_at, task.finished_at, task.pulp_href ]
     end
     print table.to_s
+  end
+  desc "inspect [PULP_HREF]", " inspect task by uuid"
+  def inspect(pulp_href)
+    api_instance = PulpcoreClient::TasksApi.new
+    pp Pulpsak.task_inspect(pulp_href)
+  end
+  desc "wait [PULP_HREF]", " inspect task by uuid"
+  def wait(pulp_href)
+    pp Pulpsak.wait_on_task(pulp_href)
   end
 end
 class Remotes < Thor
