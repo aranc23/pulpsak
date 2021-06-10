@@ -149,7 +149,7 @@ class Repositories < Thor
             raise ArgumentError, "could not find remote #{options[:remote]}"
           end
         end
-        print "syncing #{name} (you can ctrl-c out, it will continue in the background)"
+        print "syncing #{name} (you can ctrl-c out, it will continue in the background)\n"
         pp Pulpsak.wait_on_task(repo_api.sync(dist.pulp_href,opts).task)
         break
       end
