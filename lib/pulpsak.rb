@@ -87,9 +87,22 @@ module Pulpsak
   end
   def self.wait_on_task(href,sleep_time: 3, spacer: '.', final: "\n")
     api = PulpcoreClient::TasksApi.new
-    while Pulpsak.task_inspect(href).state == 'running' or Pulpsak.task_inspect(href).state == 'waiting'
-      print spacer
-      sleep sleep_time
+    last_message = ''
+    while true
+      i = Pulpsak.task_inspect(href)
+      if i.state == 'running' or i.state == 'waiting'
+        if i.progress_reports.respond_to?(:length) and i.progress_reports.length() > 0
+          if last_message != i.progress_reports[-1].message
+            last_message = i.progress_reports[-1].message
+            print last_message,"\n"
+          end
+        else
+          print spacer
+        end
+        sleep sleep_time
+      else
+        break
+      end
     end
     print final
     task = Pulpsak.task_inspect(href)
