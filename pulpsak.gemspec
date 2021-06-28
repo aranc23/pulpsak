@@ -31,4 +31,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rspec", "~> 3.0"
   spec.add_runtime_dependency "thor", "~> 1.1"
   spec.add_runtime_dependency "text-table", "~> 1.2"
+  spec.add_runtime_dependency "pulp_rpm_client", ">= 3.0"
+  spec.add_runtime_dependency "pulpcore_client", ">= 3.0"
 end
